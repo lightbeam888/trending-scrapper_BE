@@ -4,7 +4,8 @@ import cors from 'cors';
 import NodeCache from 'node-cache';
 import path from 'path';
 import {TRENDING_SOURCES} from "../src/constants";
-import {getTrendingTokens} from "../src/models/trending";
+import {getTrendingTokens, trendingModel} from "../src/models/trending";
+import {tokensModel} from "../src/models/tokens";
 import {mongoClient} from "../src/services/db/client";
 import {runIntervals} from "../src/services/shared";
 
@@ -54,13 +55,29 @@ const updateCache = async () => {
     }
 };
 
+const updateTokens = async () => {
+    const all_trends = await trendingModel.find({}).toArray()
+    for (const trend of all_trends) {
+        const token = await tokensModel.findOne({address: trend.address})
+        if (!token) {
+            await tokensModel.insertOne({
+                addedAt: new Date().toISOString(),
+                address: trend.address,
+                network: trend.network
+            })
+            continue;
+        }
+    }
+}
+
 mongoClient.once('open', async () => {
     try {
         console.log('Connected to mongo.');
 
         // Initial cache update
         await updateCache();
-
+        // Update the tokens collection every 60 seconds
+        setInterval(updateTokens, 5000);
         // Update the cache every 60 seconds
         setInterval(updateCache, 60000);
     } catch (e) {
